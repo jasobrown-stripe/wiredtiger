@@ -163,6 +163,10 @@ test_wt8057_compact_stress_SOURCES = wt8057_compact_stress/main.c
 noinst_PROGRAMS += test_wt8057_compact_stress
 all_TESTS += test_wt8057_compact_stress
 
+test_wt8120_compact_full_cache_SOURCES = wt8120_compact_full_cache/main.c
+noinst_PROGRAMS += test_wt8120_compact_full_cache
+all_TESTS += test_wt8120_compact_full_cache
+
 # Run this during a "make check" smoke test.
 TESTS = $(all_TESTS)
 LOG_COMPILER = env top_builddir=$(top_builddir) top_srcdir=$(top_srcdir) $(TEST_WRAPPER)
