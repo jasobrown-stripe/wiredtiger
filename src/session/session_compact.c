@@ -285,7 +285,7 @@ __compact_worker(WT_SESSION_IMPL *session)
             }
         }
         if (!another_pass) {
-            printf("AAA another_pass is false, break!");
+            printf("AAA another_pass is false, break!\n");
             break;
         }
 

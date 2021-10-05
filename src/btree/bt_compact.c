@@ -123,12 +123,12 @@ __wt_compact(WT_SESSION_IMPL *session)
     WT_DECL_RET;
     WT_REF *ref;
     u_int i;
-    int32_t root_pages, dirty_pages, skipped;
+    int32_t root_pages, dirty_pages, skipped, walked;
     bool skip;
 
     bm = S2BT(session)->bm;
     ref = NULL;
-    root_pages = dirty_pages = skipped = 0;
+    root_pages = dirty_pages = skipped = walked = 0;
 
     WT_STAT_DATA_INCR(session, session_compact);
 
@@ -142,6 +142,8 @@ __wt_compact(WT_SESSION_IMPL *session)
 
     /* Walk the tree reviewing pages to see if they should be re-written. */
     for (i = 0;;) {
+        walked++;
+
         /*
          * Periodically check if we've timed out or eviction is stuck. Quit if eviction is stuck,
          * we're making the problem worse.
@@ -209,7 +211,7 @@ __wt_compact(WT_SESSION_IMPL *session)
     }
 
 err:
-    printf("AAA root_pages: %d, dirty_pages: %d, skipped by __compact_rewrite_lock: %d\n", root_pages, dirty_pages, skipped);
+    printf("AAA walked pages: %d, root_pages: %d, dirty_pages: %d, skipped by __compact_rewrite_lock: %d\n", walked, root_pages, dirty_pages, skipped);
     if (ref != NULL)
         WT_TRET(__wt_page_release(session, ref, 0));
 
