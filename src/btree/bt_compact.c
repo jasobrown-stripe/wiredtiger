@@ -123,10 +123,12 @@ __wt_compact(WT_SESSION_IMPL *session)
     WT_DECL_RET;
     WT_REF *ref;
     u_int i;
+    int32_t root_pages, dirty_pages, skipped;
     bool skip;
 
     bm = S2BT(session)->bm;
     ref = NULL;
+    root_pages = dirty_pages = skipped = 0;
 
     WT_STAT_DATA_INCR(session, session_compact);
 
@@ -182,14 +184,21 @@ __wt_compact(WT_SESSION_IMPL *session)
          * for now, the repeated checkpoints that compaction requires are more than likely to pick
          * up all dirty pages at some point.
          */
-        if (__wt_ref_is_root(ref))
+        if (__wt_ref_is_root(ref)) {
+            root_pages++;
             continue;
-        if (__wt_page_is_modified(ref->page))
+        }
+
+        if (__wt_page_is_modified(ref->page)) {
+            dirty_pages++;
             continue;
+        }
 
         WT_ERR(__compact_rewrite_lock(session, ref, &skip));
-        if (skip)
+        if (skip) {
+            skipped++;
             continue;
+        }
 
         /* Rewrite the page: mark the page and tree dirty. */
         WT_ERR(__wt_page_modify_init(session, ref->page));
@@ -200,6 +209,7 @@ __wt_compact(WT_SESSION_IMPL *session)
     }
 
 err:
+    printf("AAA root_pages: %d, dirty_pages: %d, skipped by __compact_rewrite_lock: %d\n", root_pages, dirty_pages, skipped);
     if (ref != NULL)
         WT_TRET(__wt_page_release(session, ref, 0));
 

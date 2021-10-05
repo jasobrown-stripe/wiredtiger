@@ -206,9 +206,11 @@ __compact_checkpoint(WT_SESSION_IMPL *session)
     const char *checkpoint_cfg[] = {
       WT_CONFIG_BASE(session, WT_SESSION_checkpoint), "force=1", NULL};
 
+    
     /* Checkpoints take a lot of time, check if we've run out. */
     WT_RET(__wt_session_compact_check_timeout(session));
 
+    printf("AAA: in __compact_checkpoint\n");
     return (__wt_txn_checkpoint(session, checkpoint_cfg, true));
 }
 
@@ -250,6 +252,11 @@ __compact_worker(WT_SESSION_IMPL *session)
             session->compact_state = WT_COMPACT_RUNNING;
             WT_WITH_DHANDLE(session, session->op_handle[i], ret = __wt_compact(session));
             WT_ERR_ERROR_OK(ret, EBUSY, true);
+            
+            printf("AAA __wt_compact ret = %d; compact_state = %s\n ", ret, 
+            session->compact_state == WT_COMPACT_RUNNING ? "WT_COMPACT_RUNNING" : 
+            session->compact_state == WT_COMPACT_SUCCESS ? "WT_COMPACT_SUCCESS" : "WT_COMPACT_NONE");
+
             /*
              * If successful and we did work, schedule another pass. If successful and we did no
              * work, skip this file in the future.
@@ -277,8 +284,10 @@ __compact_worker(WT_SESSION_IMPL *session)
                 another_pass = true;
             }
         }
-        if (!another_pass)
+        if (!another_pass) {
+            printf("AAA another_pass is false, break!");
             break;
+        }
 
         /*
          * Perform two checkpoints (see this file's leading comment for details).
