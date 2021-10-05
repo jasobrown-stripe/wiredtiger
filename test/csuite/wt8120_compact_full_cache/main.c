@@ -57,11 +57,11 @@ struct thread_data {
 
 /* Forward declarations. */
 static void run_test(const char *home, const char *uri);
-static void *thread_func_update(void *arg);
+static void *test_thread_func(void *arg);
 static void *thread_func_compact(void *arg);
 static void populate(WT_SESSION *session, const char *uri);
 static void remove_records(WT_SESSION *session, const char *uri);
-static void update_records(WT_SESSION *session, const char *uri, uint32_t begin, uint32_t end, bool update);
+static void workload(WT_SESSION *session, const char *uri, uint32_t begin, uint32_t end, bool update);
 static uint64_t get_file_size(WT_SESSION *session, const char *uri);
 
 /* Methods implementation. */
@@ -129,7 +129,7 @@ run_test(const char *home, const char *uri)
 
     for (i = 0; i < THREADS_NUM; i++) {
         td[i].conn = conn;
-        testutil_check(pthread_create(&threads_update[i], NULL, thread_func_update, &td[i]));
+        testutil_check(pthread_create(&threads_update[i], NULL, test_thread_func, &td[i]));
         //__wt_sleep(1, 0);
     }
 
@@ -157,7 +157,7 @@ run_test(const char *home, const char *uri)
 }
 
 static void *
-thread_func_update(void *arg)
+test_thread_func(void *arg)
 {
     struct thread_data *td;
     WT_SESSION *session;
@@ -167,8 +167,8 @@ thread_func_update(void *arg)
     testutil_check(td->conn->open_session(td->conn, NULL, NULL, &session));
 
     WT_STAT_CONN_INCR((WT_SESSION_IMPL *)session, session_table_compact_running_updates);
-    printf("Updating records...\n");
-    update_records(session, td->uri, td->begin, td->end, td->update);
+    printf(td->update ? "Updating records...\n" : "Reading records...\n");
+    workload(session, td->uri, td->begin, td->end, td->update);
     printf(td->update ? "Updating finished.\n" : "Reading finished.\n");
     WT_STAT_CONN_DECR((WT_SESSION_IMPL *)session, session_table_compact_running_updates);
 
@@ -247,7 +247,7 @@ remove_records(WT_SESSION *session, const char *uri)
 }
 
 static void
-update_records(WT_SESSION *session, const char *uri, uint32_t begin, uint32_t end, bool update)
+workload(WT_SESSION *session, const char *uri, uint32_t begin, uint32_t end, bool update)
 {
     WT_CURSOR *cursor;
     size_t buf_size;
