@@ -313,6 +313,8 @@ __wt_session_compact(WT_SESSION *wt_session, const char *uri, const char *config
     session = (WT_SESSION_IMPL *)wt_session;
     SESSION_API_CALL(session, compact, config, cfg);
 
+    WT_STAT_CONN_INCR(session, session_table_compact_running);
+
     /*
      * The compaction thread should not block when the cache is full: it is holding locks blocking
      * checkpoints and once the cache is full, it can spend a long time doing eviction.
@@ -397,6 +399,9 @@ err:
         WT_STAT_CONN_INCR(session, session_table_compact_fail);
     else
         WT_STAT_CONN_INCR(session, session_table_compact_success);
+
+    WT_STAT_CONN_DECR(session, session_table_compact_running);
+
     API_END_RET_NOTFOUND_MAP(session, ret);
 }
 

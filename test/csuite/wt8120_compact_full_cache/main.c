@@ -34,15 +34,6 @@
 /* If you modify number of records or data content, make sure to update DATA_SIZE accordingly. */
 #define NUM_RECORDS 3000000
 
-/*
- * This is WiredTigerCheckpoint size in MB from meatadata for
- * "file:test_wt8120_compact_full_cache.wt".
- */
-#define DATA_SIZE 2629
-
-/* Approximate file size in MB without compact. */
-#define FILE_SIZE_NO_COMPACT 5250
-
 /* Constants and variables declaration. */
 /*
  * You may want to add "verbose=[compact,compact_progress]" to the connection config string to get
@@ -54,12 +45,14 @@ static const char conn_config[] =
 static const char table_config[] =
   "allocation_size=4KB,leaf_page_max=4KB,key_format=i,value_format=QQQS";
 static char data_str[1024] = "";
+bool volatile stop_updates = false;
 
 /* Structures definition. */
 struct thread_data {
     WT_CONNECTION *conn;
     const char *uri;
-    int begin, end;
+    uint32_t begin, end;
+    bool update;
 };
 
 /* Forward declarations. */
@@ -68,7 +61,7 @@ static void *thread_func_update(void *arg);
 static void *thread_func_compact(void *arg);
 static void populate(WT_SESSION *session, const char *uri);
 static void remove_records(WT_SESSION *session, const char *uri);
-static void update_records(WT_SESSION *session, const char *uri, int begin, int end);
+static void update_records(WT_SESSION *session, const char *uri, uint32_t begin, uint32_t end, bool update);
 static uint64_t get_file_size(WT_SESSION *session, const char *uri);
 
 /* Methods implementation. */
@@ -99,16 +92,16 @@ run_test(const char *home, const char *uri)
     uint64_t file_sz_after;
     int i;
     struct thread_data td[THREADS_NUM] = {
-      {NULL, uri, 1, NUM_RECORDS / 3},
-      {NULL, uri, (NUM_RECORDS * 2) / 3, NUM_RECORDS},
-      {NULL, uri, 1, NUM_RECORDS / 3},
-      {NULL, uri, (NUM_RECORDS * 2) / 3, NUM_RECORDS},
-      {NULL, uri, 1, NUM_RECORDS / 3},
-      {NULL, uri, (NUM_RECORDS * 2) / 3, NUM_RECORDS},
-      {NULL, uri, 1, NUM_RECORDS / 3},
-      {NULL, uri, (NUM_RECORDS * 2) / 3, NUM_RECORDS},
-      {NULL, uri, 1, NUM_RECORDS / 3},
-      {NULL, uri, (NUM_RECORDS * 2) / 3, NUM_RECORDS},
+      {NULL, uri, 1, NUM_RECORDS / 3, true},
+      {NULL, uri, (NUM_RECORDS * 2) / 3, NUM_RECORDS, false},
+      {NULL, uri, 1, NUM_RECORDS / 3, false},
+      {NULL, uri, (NUM_RECORDS * 2) / 3, NUM_RECORDS, true},
+      {NULL, uri, 1, NUM_RECORDS / 3, true},
+      {NULL, uri, (NUM_RECORDS * 2) / 3, NUM_RECORDS, false},
+      {NULL, uri, 1, NUM_RECORDS / 3, false},
+      {NULL, uri, (NUM_RECORDS * 2) / 3, NUM_RECORDS, true},
+      {NULL, uri, 1, NUM_RECORDS / 3, true},
+      {NULL, uri, (NUM_RECORDS * 2) / 3, NUM_RECORDS, false},
     };
 
     testutil_make_work_dir(home);
@@ -131,12 +124,15 @@ run_test(const char *home, const char *uri)
     remove_records(session, uri);
     testutil_check(session->checkpoint(session, NULL));
 
+    td[0].conn = conn;
+    testutil_check(pthread_create(&thread_compact, NULL, thread_func_compact, &td[0]));
+
     for (i = 0; i < THREADS_NUM; i++) {
         td[i].conn = conn;
         testutil_check(pthread_create(&threads_update[i], NULL, thread_func_update, &td[i]));
+        //__wt_sleep(1, 0);
     }
 
-    testutil_check(pthread_create(&thread_compact, NULL, thread_func_compact, &td[0]));
 
     /* Wait for the threads to finish the work. */
     for (i = 0; i < THREADS_NUM; i++)
@@ -156,14 +152,8 @@ run_test(const char *home, const char *uri)
     testutil_check(conn->close(conn, NULL));
     conn = NULL;
 
-    /* Check if there's at least 10% compaction. */
-    printf(
-      " - Compressed file size is: %f MB\n - Approximate data size from metedata is: %d MB\n - "
-      "Approximate file size without compact: %d MB\n",
-      file_sz_after / (1024.0 * 1024), DATA_SIZE, FILE_SIZE_NO_COMPACT);
-
-    /* Make sure the compact operation has reduced the file size by at least 20%. */
-    // testutil_assert((file_sz_before / 100) * 80 > file_sz_after);
+    printf(" - Compressed file size is: %f MB\n", file_sz_after / (1024.0 * 1024));
+    testutil_assert(file_sz_after / (1024.0 * 1024) < 4000);
 }
 
 static void *
@@ -176,9 +166,11 @@ thread_func_update(void *arg)
 
     testutil_check(td->conn->open_session(td->conn, NULL, NULL, &session));
 
+    WT_STAT_CONN_INCR((WT_SESSION_IMPL *)session, session_table_compact_running_updates);
     printf("Updating records...\n");
-    update_records(session, td->uri, td->begin, td->end);
-    printf("Updating finished.\n");
+    update_records(session, td->uri, td->begin, td->end, td->update);
+    printf(td->update ? "Updating finished.\n" : "Reading finished.\n");
+    WT_STAT_CONN_DECR((WT_SESSION_IMPL *)session, session_table_compact_running_updates);
 
     testutil_check(session->close(session, NULL));
     session = NULL;
@@ -200,6 +192,7 @@ thread_func_compact(void *arg)
     printf("Compacting table...\n");
     testutil_check(session->compact(session, td->uri, NULL));
     printf("Compacting finished.\n");
+    stop_updates = true;
 
     testutil_check(session->close(session, NULL));
     session = NULL;
@@ -254,21 +247,38 @@ remove_records(WT_SESSION *session, const char *uri)
 }
 
 static void
-update_records(WT_SESSION *session, const char *uri, int begin, int end)
+update_records(WT_SESSION *session, const char *uri, uint32_t begin, uint32_t end, bool update)
 {
     WT_CURSOR *cursor;
     size_t buf_size;
-    int i;
+    uint32_t i;
+    uint64_t val1, val2, val3;
+    char *str;
+    WT_RAND_STATE rs;
+    int key;
+
+    __wt_random_init_seed((WT_SESSION_IMPL*)session, &rs);
 
     testutil_check(session->open_cursor(session, uri, NULL, NULL, &cursor));
 
     buf_size = sizeof(data_str) / sizeof(data_str[0]);
     memset(data_str, 'a', buf_size - 1);
     data_str[buf_size - 1] = '\0';
-    for (i = begin; i < end; i++) {
-        cursor->set_key(cursor, i);
-        cursor->set_value(cursor, 1, 2, 3, data_str);
-        testutil_check(cursor->update(cursor));
+    
+    for (i = begin; !stop_updates && i < end; i++) {
+        key = (int)(__wt_random(&rs) % (end - begin) + begin);
+        cursor->set_key(cursor, key);
+        
+        if (update) {
+            /* Update record. */
+            cursor->set_value(cursor, 1, 2, 3, data_str);
+            testutil_check(cursor->update(cursor));
+        }
+        else {
+            /* Read random record. */
+            testutil_check(cursor->search(cursor));
+            testutil_check(cursor->get_value(cursor, &val1, &val2, &val3, &str));
+        }
     }
 
     testutil_check(cursor->close(cursor));
