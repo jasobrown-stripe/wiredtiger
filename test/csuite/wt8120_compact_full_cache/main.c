@@ -88,7 +88,7 @@ run_test(const char *home, const char *uri)
 {
     WT_CONNECTION *conn;
     WT_SESSION *session;
-    pthread_t thread_compact, threads_update[THREADS_NUM];
+    pthread_t thread_compact, threads_workload[THREADS_NUM];
     uint64_t file_sz_after;
     int i;
     struct thread_data td[THREADS_NUM] = {
@@ -129,14 +129,14 @@ run_test(const char *home, const char *uri)
 
     for (i = 0; i < THREADS_NUM; i++) {
         td[i].conn = conn;
-        testutil_check(pthread_create(&threads_update[i], NULL, test_thread_func, &td[i]));
+        testutil_check(pthread_create(&threads_workload[i], NULL, test_thread_func, &td[i]));
         //__wt_sleep(1, 0);
     }
 
 
     /* Wait for the threads to finish the work. */
     for (i = 0; i < THREADS_NUM; i++)
-        (void)pthread_join(threads_update[i], NULL);
+        (void)pthread_join(threads_workload[i], NULL);
 
     (void)pthread_join(thread_compact, NULL);
 
