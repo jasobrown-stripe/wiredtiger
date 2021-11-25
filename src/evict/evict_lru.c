@@ -435,10 +435,10 @@ __evict_server(WT_SESSION_IMPL *session, bool *did_work)
         return (0);
 #endif
     /*
-     * If we're stuck for 5 minutes in diagnostic mode, or the verbose evict_stuck flag is
+     * If we're stuck for 3 minutes in diagnostic mode, or the verbose evict_stuck flag is
      * configured, log the cache and transaction state.
      *
-     * If we're stuck for 5 minutes in diagnostic mode, give up.
+     * If we're stuck for 3 minutes in diagnostic mode, give up.
      *
      * We don't do this check for in-memory workloads because application threads are not blocked by
      * the cache being full. If the cache becomes full of clean pages, we can be servicing reads
@@ -448,7 +448,7 @@ __evict_server(WT_SESSION_IMPL *session, bool *did_work)
         return (0);
 
     __wt_epoch(session, &now);
-    if (WT_TIMEDIFF_SEC(now, cache->stuck_time) > WT_MINUTE * 5) {
+    if (WT_TIMEDIFF_SEC(now, cache->stuck_time) > WT_MINUTE * 3) {
 #if defined(HAVE_DIAGNOSTIC)
         __wt_err(session, ETIMEDOUT, "Cache stuck for too long, giving up");
         WT_RET(__wt_verbose_dump_txn(session));
@@ -1705,7 +1705,9 @@ __evict_walk_tree(WT_SESSION_IMPL *session, WT_EVICT_QUEUE *queue, u_int max_ent
     WT_EVICT_ENTRY *end, *evict, *start;
     WT_PAGE *last_parent, *page;
     WT_REF *ref;
-    uint64_t internal_pages_already_queued, internal_pages_queued, internal_pages_seen;
+    uint64_t internal_pages_already_queued, internal_pages_queued, internal_pages_seen,
+      update_pages_skipped, update_pages_wanted, pages_checkpoint_skipped, update_cant_evict,
+      update_cant_push, update_pages_retry_skipped, update_int_pages_skipped;
     uint64_t min_pages, pages_already_queued, pages_seen, pages_queued, refs_walked;
     uint32_t read_flags, remaining_slots, target_pages, walk_flags;
     int restarts;
@@ -1849,6 +1851,8 @@ __evict_walk_tree(WT_SESSION_IMPL *session, WT_EVICT_QUEUE *queue, u_int max_ent
      * Once we hit the page limit, do one more step through the walk in
      * case we are appending and only the last page in the file is live.
      */
+    update_pages_skipped = update_pages_wanted = pages_checkpoint_skipped = update_cant_evict =
+      update_cant_push = update_pages_retry_skipped = update_int_pages_skipped = 0;
     internal_pages_already_queued = internal_pages_queued = internal_pages_seen = 0;
     for (evict = start, pages_already_queued = pages_queued = pages_seen = refs_walked = 0;
          evict < end && (ret == 0 || ret == WT_NOTFOUND);
@@ -1931,8 +1935,12 @@ __evict_walk_tree(WT_SESSION_IMPL *session, WT_EVICT_QUEUE *queue, u_int max_ent
         }
 
         /* Don't queue dirty pages in trees during checkpoints. */
-        if (modified && WT_BTREE_SYNCING(btree))
+        if (modified && WT_BTREE_SYNCING(btree)) {
+            if (F_ISSET(cache, WT_CACHE_EVICT_UPDATES)) {
+                pages_checkpoint_skipped++;
+            }
             continue;
+        }
 
         /*
          * It's possible (but unlikely) to visit a page without a read generation, if we race with
@@ -1983,6 +1991,13 @@ __evict_walk_tree(WT_SESSION_IMPL *session, WT_EVICT_QUEUE *queue, u_int max_ent
         want_page = (F_ISSET(cache, WT_CACHE_EVICT_CLEAN) && !modified) ||
           (F_ISSET(cache, WT_CACHE_EVICT_DIRTY) && modified) ||
           (F_ISSET(cache, WT_CACHE_EVICT_UPDATES) && page->modify != NULL);
+
+        if (F_ISSET(cache, WT_CACHE_EVICT_UPDATES)) {
+            if (page->modify != NULL)
+                update_pages_wanted++;
+            else
+                update_pages_skipped++;
+        }
         if (!want_page)
             continue;
 
@@ -1995,10 +2010,16 @@ __evict_walk_tree(WT_SESSION_IMPL *session, WT_EVICT_QUEUE *queue, u_int max_ent
          * trees become completely idle, we eventually push them out of cache completely.
          */
         if (!F_ISSET(cache, WT_CACHE_EVICT_DEBUG_MODE) && F_ISSET(ref, WT_REF_FLAG_INTERNAL)) {
-            if (page == last_parent)
+            if (page == last_parent) {
+                if (F_ISSET(cache, WT_CACHE_EVICT_UPDATES))
+                    update_int_pages_skipped++;
                 continue;
-            if (btree->evict_walk_period == 0 && !__wt_cache_aggressive(session))
+            }
+            if (btree->evict_walk_period == 0 && !__wt_cache_aggressive(session)) {
+                if (F_ISSET(cache, WT_CACHE_EVICT_UPDATES))
+                    update_int_pages_skipped++;
                 continue;
+            }
         }
 
         /* If eviction gets aggressive, anything else is fair game. */
@@ -2012,17 +2033,26 @@ __evict_walk_tree(WT_SESSION_IMPL *session, WT_EVICT_QUEUE *queue, u_int max_ent
          * evict the same page.
          */
         if (!__wt_page_evict_retry(session, page) ||
-          (modified && page->modify->update_txn >= conn->txn_global.last_running))
+          (modified && page->modify->update_txn >= conn->txn_global.last_running)) {
+            if (F_ISSET(cache, WT_CACHE_EVICT_UPDATES))
+                update_pages_retry_skipped++;
             continue;
+        }
 
 fast:
         /* If the page can't be evicted, give up. */
-        if (!__wt_page_can_evict(session, ref, NULL))
+        if (!__wt_page_can_evict(session, ref, NULL)) {
+            if (F_ISSET(cache, WT_CACHE_EVICT_UPDATES))
+                update_cant_evict++;
             continue;
+        }
 
         WT_ASSERT(session, evict->ref == NULL);
-        if (!__evict_push_candidate(session, queue, evict, ref))
+        if (!__evict_push_candidate(session, queue, evict, ref)) {
+            if (F_ISSET(cache, WT_CACHE_EVICT_UPDATES))
+                update_cant_push++;
             continue;
+        }
         ++evict;
         ++pages_queued;
         ++btree->evict_walk_progress;
@@ -2083,8 +2113,14 @@ fast:
                 WT_RET_NOTFOUND_OK(__wt_tree_walk_count(session, &ref, &refs_walked, walk_flags));
         btree->evict_ref = ref;
     }
-
+    WT_STAT_CONN_INCRV(session, cache_eviction_retry_skipped, update_pages_retry_skipped);
+    WT_STAT_CONN_INCRV(session, cache_eviction_update_skipped, update_pages_skipped);
+    WT_STAT_CONN_INCRV(session, cache_eviction_update_wanted, update_pages_wanted);
+    WT_STAT_CONN_INCRV(session, cache_eviction_update_int_pages_skipped, update_int_pages_skipped);
+    WT_STAT_CONN_INCRV(session, cache_eviction_cant_evict, update_cant_evict);
+    WT_STAT_CONN_INCRV(session, cache_eviction_cant_push, update_cant_push);
     WT_STAT_CONN_INCRV(session, cache_eviction_walk, refs_walked);
+    WT_STAT_CONN_INCRV(session, cache_checkpoint_skipped, pages_checkpoint_skipped);
     WT_STAT_CONN_DATA_INCRV(session, cache_eviction_pages_seen, pages_seen);
     WT_STAT_CONN_INCRV(session, cache_eviction_pages_already_queued, pages_already_queued);
     WT_STAT_CONN_INCRV(session, cache_eviction_internal_pages_seen, internal_pages_seen);
@@ -2553,16 +2589,18 @@ __verbose_dump_cache_single(WT_SESSION_IMPL *session, uint64_t *total_bytesp,
   uint64_t *total_dirty_bytesp, uint64_t *total_updates_bytesp)
 {
     WT_BTREE *btree;
+    WT_CACHE *cache;
     WT_DATA_HANDLE *dhandle;
     WT_PAGE *page;
     WT_REF *next_walk;
     size_t size;
+    uint64_t bytes_updates_plus_overhead;
     uint64_t intl_bytes, intl_bytes_max, intl_dirty_bytes;
     uint64_t intl_dirty_bytes_max, intl_dirty_pages, intl_pages;
     uint64_t leaf_bytes, leaf_bytes_max, leaf_dirty_bytes;
-    uint64_t leaf_dirty_bytes_max, leaf_dirty_pages, leaf_pages, updates_bytes;
+    uint64_t leaf_dirty_bytes_max, leaf_dirty_pages, leaf_pages, updates_bytes, update_pages;
 
-    intl_bytes = intl_bytes_max = intl_dirty_bytes = 0;
+    intl_bytes = intl_bytes_max = intl_dirty_bytes = update_pages = 0;
     intl_dirty_bytes_max = intl_dirty_pages = intl_pages = 0;
     leaf_bytes = leaf_bytes_max = leaf_dirty_bytes = 0;
     leaf_dirty_bytes_max = leaf_dirty_pages = leaf_pages = 0;
@@ -2609,10 +2647,15 @@ __verbose_dump_cache_single(WT_SESSION_IMPL *session, uint64_t *total_bytesp,
                 leaf_dirty_bytes += size;
                 leaf_dirty_bytes_max = WT_MAX(leaf_dirty_bytes_max, size);
             }
-            if (page->modify != NULL)
+            if (page->modify != NULL) {
                 updates_bytes += page->modify->bytes_updates;
+                ++update_pages;
+            }
         }
     }
+
+    cache = S2C(session)->cache;
+    bytes_updates_plus_overhead = __wt_cache_bytes_updates(cache);
 
     if (intl_pages == 0)
         WT_RET(__wt_msg(session, "internal: 0 pages"));
@@ -2637,14 +2680,16 @@ __verbose_dump_cache_single(WT_SESSION_IMPL *session, uint64_t *total_bytesp,
             "leaf: "
             "%" PRIu64 " pages, "
             "%" PRIu64 "MB, "
-            "%" PRIu64 "/%" PRIu64 " clean/dirty pages, "
+            "%" PRIu64 "/%" PRIu64 "/%" PRIu64 " clean/dirty/update pages, "
             "%" PRIu64 "/%" PRIu64 "/%" PRIu64 " clean/dirty/updates MB, "
             "%" PRIu64 "MB max page, "
-            "%" PRIu64 "MB max dirty page",
+            "%" PRIu64 "MB max dirty page, "
+            "%" PRIu64 "MB updates plus overhead",
             leaf_pages, leaf_bytes / WT_MEGABYTE, leaf_pages - leaf_dirty_pages, leaf_dirty_pages,
-            (leaf_bytes - leaf_dirty_bytes) / WT_MEGABYTE, leaf_dirty_bytes / WT_MEGABYTE,
-            updates_bytes / WT_MEGABYTE, leaf_bytes_max / WT_MEGABYTE,
-            leaf_dirty_bytes_max / WT_MEGABYTE));
+            update_pages, (leaf_bytes - leaf_dirty_bytes) / WT_MEGABYTE,
+            leaf_dirty_bytes / WT_MEGABYTE, updates_bytes / WT_MEGABYTE,
+            leaf_bytes_max / WT_MEGABYTE, leaf_dirty_bytes_max / WT_MEGABYTE,
+            bytes_updates_plus_overhead / WT_MEGABYTE));
 
     *total_bytesp += intl_bytes + leaf_bytes;
     *total_dirty_bytesp += intl_dirty_bytes + leaf_dirty_bytes;
