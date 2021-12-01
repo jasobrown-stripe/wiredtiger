@@ -49,15 +49,15 @@ with open(filename, 'r') as f:
         if line.find('AUTOMATIC VERBOSE ENUM STRING GENERATION START') != -1:
             # The next line is in the section
             in_section = True
+            for category in verbose_categories:
+                line_tmp += "\"" + category + "\","
+            line_tmp += '\n'
         elif line.find('AUTOMATIC VERBOSE ENUM STRING GENERATION STOP') != -1:
             in_section = False
-        elif in_section == True:
-            line_tmp = ""
-            for category in verbose_categories:
-                line_tmp += "\"" + category + "\", "
-            line_tmp += '\n'
 
         tfile.write(line_tmp)
+
+    assert not in_section, "Error"
 
     tfile.close()
     compare_srcfile(tmp_file, filename)
