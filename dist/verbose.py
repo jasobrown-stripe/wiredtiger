@@ -46,14 +46,19 @@ with open(filename, 'r') as f:
 
         line_tmp = line
 
-        if line.find('AUTOMATIC VERBOSE ENUM STRING GENERATION START') != -1:
+        if line.find('AUTOMATIC VERBOSE ENUM STRING GENERATION STOP') != -1:
+            in_section = False
+        elif line.find('AUTOMATIC VERBOSE ENUM STRING GENERATION START') != -1:
+            escape_char = ''
+            if line.strip().endswith('\\'):
+                escape_char = '\\'
+            indentation = len(line) - len(line.lstrip())
             # The next line is in the section
             in_section = True
             for category in verbose_categories:
-                line_tmp += "\"" + category + "\","
-            line_tmp += '\\\n'
-        elif line.find('AUTOMATIC VERBOSE ENUM STRING GENERATION STOP') != -1:
-            in_section = False
+                line_tmp += indentation * ' ' + "\"" + category + "\", %s\n" % escape_char
+        elif in_section:
+            continue
 
         tfile.write(line_tmp)
 
