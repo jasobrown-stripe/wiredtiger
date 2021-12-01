@@ -7101,6 +7101,7 @@ extern int wiredtiger_extension_terminate(WT_CONNECTION *connection);
  * WiredTiger verbose event categories.
  */
 typedef enum {
+/* VERBOSE ENUM START */
     WT_VERB_API,                  /*!< API messages. */
     WT_VERB_BACKUP,               /*!< Backup messages. */
     WT_VERB_BLKCACHE,             /*!< Block cache messages. */
@@ -7146,7 +7147,9 @@ typedef enum {
     WT_VERB_VERIFY,               /*!< Verify messages. */
     WT_VERB_VERIFY_PROGRESS,      /*!< Verify progress messages. */
     WT_VERB_VERSION,              /*!< Version progress messages. */
-    WT_VERB_WRITE                 /*!< Write progress messages. */
+    WT_VERB_WRITE,                /*!< Write progress messages. */
+/* VERBOSE ENUM STOP */
+    WT_VERB_NUM_CATEGORIES
 } WT_VERBOSE_CATEGORY;
 /*! @} */
 
