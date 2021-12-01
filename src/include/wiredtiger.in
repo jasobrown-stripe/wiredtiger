@@ -7168,11 +7168,13 @@ typedef enum {
  * for debugging).
  */
 typedef enum {
-    WT_VERBOSE_ERROR = -3,	/*!< Error conditions triggered in WiredTiger. */
-    WT_VERBOSE_WARNING,		/*!< Warning conditions potentially signaling non-imminent errors and behaviors. */
-    WT_VERBOSE_NOTICE,		/*!< Messages for significant events in WiredTiger, usually worth noting. */
-    WT_VERBOSE_INFO,		/*!< Informational style messages. */
-    WT_VERBOSE_DEBUG		/*!< Low severity messages, useful for debugging purposes. */
+    WT_VERBOSE_ERROR = -3,  /*!< Error conditions triggered in WiredTiger. */
+    WT_VERBOSE_WARNING,     /*!< Warning conditions potentially signaling non-imminent errors and
+                            behaviors. */
+    WT_VERBOSE_NOTICE,      /*!< Messages for significant events in WiredTiger, usually worth
+                            noting. */
+    WT_VERBOSE_INFO,        /*!< Informational style messages. */
+    WT_VERBOSE_DEBUG        /*!< Low severity messages, useful for debugging purposes. */
 } WT_VERBOSE_LEVEL;
 /*! @} */
 /*
