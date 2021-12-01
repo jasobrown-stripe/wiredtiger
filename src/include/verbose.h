@@ -11,12 +11,10 @@
 
 /* Convert a category to its string representation. */
 #define WT_VERBOSE_CATEGORY_STR(category) \
-    (const char *[])                      \
-    {                                     \
-/* AUTOMATIC VERBOSE ENUM STRING GENERATION START */
-/* AUTOMATIC VERBOSE ENUM STRING GENERATION STOP */
-}
-[category]
+    (const char *[]){\
+/* AUTOMATIC VERBOSE ENUM STRING GENERATION START */\
+/* AUTOMATIC VERBOSE ENUM STRING GENERATION STOP */\
+        }[category]
 
 /* Convert a verbose level to its string representation. */
 #define WT_VERBOSE_LEVEL_STR(level, level_str) \
