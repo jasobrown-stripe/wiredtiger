@@ -2507,8 +2507,9 @@ tasks:
     commands:
       - func: "get project"
       - func: "compile wiredtiger"
+        # FIXME-WT-8482
         # CC is set to the system default "clang" binary here as a workaround. Change it back
-        # to mongodbtoolchain "clang" binary after BUILD-10248 fix.
+        # to mongodbtoolchain "clang" binary after WT-8482 fix.
         vars:
           posix_configure_flags:
             -DCMAKE_TOOLCHAIN_FILE=../cmake/toolchains/clang.cmake
@@ -2738,8 +2739,9 @@ tasks:
       - func: "get project"
       - func: "compile wiredtiger"
         vars:
+          # FIXME-WT-8482
           # CC is set to the system default "clang" binary here as a workaround. Change it back
-          # to mongodbtoolchain "clang" binary after BUILD-10248 fix.
+          # to mongodbtoolchain "clang" binary after WT-8482 fix.
           posix_configure_flags:
             -DHAVE_DIAGNOSTIC=1
             -DHAVE_BUILTIN_EXTENSION_LZ4=1
