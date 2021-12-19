@@ -2826,10 +2826,6 @@ tasks:
     commands:
       - func: "get project"
       - func: "compile wiredtiger"
-        vars:
-          configure_env_vars:
-            CXX=/opt/mongodbtoolchain/v3/bin/g++
-            PATH=/opt/mongodbtoolchain/v3/bin:$PATH ADD_CFLAGS="-ggdb -fPIC"
       - command: shell.exec
         params:
           working_dir: "wiredtiger/bench/workgen/runner"
