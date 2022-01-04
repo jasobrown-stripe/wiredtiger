@@ -167,6 +167,16 @@ config_bool(
 )
 
 config_bool(
+    ENABLE_URING
+    "Build the liburing storage extension"
+    DEFAULT OFF
+    DEPENDS "HAVE_LIBURING"
+    # Specifically throw a fatal error if a user tries to enable the zstd compressor without
+    # actually having the library available (as opposed to silently defaulting to OFF).
+    DEPENDS_ERROR ON "Failed to find io_uring library"
+)
+
+config_bool(
     ENABLE_SODIUM
     "Build the libsodium encryption extension"
     DEFAULT OFF

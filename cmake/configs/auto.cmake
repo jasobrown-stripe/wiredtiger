@@ -272,6 +272,13 @@ config_lib(
 )
 
 config_lib(
+    HAVE_LIBURING
+    "uring library exists."
+    LIB "uring"
+    HEADER "liburing.h"
+)
+
+config_lib(
     HAVE_LIBSODIUM
     "sodium library exists."
     LIB "sodium"

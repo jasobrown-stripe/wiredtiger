@@ -100,4 +100,9 @@ macro(define_wiredtiger_library target type)
     if(HAVE_BUILTIN_EXTENSION_ZSTD)
         target_link_libraries(${target} PRIVATE wt::zstd)
     endif()
+
+    # custom io_uring storage_source dependency
+    if(HAVE_BUILTIN_EXTENSION_URING)
+        target_link_libraries(${target} PRIVATE wt::uring)
+    endif()
 endmacro()

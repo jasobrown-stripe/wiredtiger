@@ -24,6 +24,9 @@
 /* ZSTD support automatically loaded. */
 #cmakedefine HAVE_BUILTIN_EXTENSION_ZSTD 1
 
+/* liburing support automatically loaded. */
+#cmakedefine HAVE_BUILTIN_EXTENSION_URING 1
+
 /* libsodium support automatically loaded. */
 #cmakedefine HAVE_BUILTIN_EXTENSION_SODIUM 1
 
@@ -85,6 +88,9 @@
 
 /* Define to 1 if you have the `zstd' library (-lzstd). */
 #cmakedefine HAVE_LIBZSTD 1
+
+/* Define to 1 if you have the `uring' library (-luring). */
+#cmakedefine HAVE_LIBURING 1
 
 /* Define to 1 if you have the `sodium' library (-lsodium). */
 #cmakedefine HAVE_LIBSODIUM 1

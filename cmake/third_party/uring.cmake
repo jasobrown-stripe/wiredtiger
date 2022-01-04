@@ -26,36 +26,25 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 #
 
-project(ext C)
+if(NOT HAVE_LIBURING)
+    # We don't need to construct a uring library target.
+    return()
+endif()
 
-# Build the compressor extensions.
-add_subdirectory(compressors/lz4)
-add_subdirectory(compressors/snappy)
-add_subdirectory(compressors/zlib)
-add_subdirectory(compressors/zstd)
-add_subdirectory(compressors/nop)
+if(TARGET wt::uring)
+    # Avoid redefining the imported library, given this file can be used as an include.
+    return()
+endif()
 
-# Build the collator extensions.
-add_subdirectory(collators/reverse)
-add_subdirectory(collators/revint)
-
-# Build the encryptor extensions.
-add_subdirectory(encryptors/nop)
-
-# Build the extractor extensions.
-add_subdirectory(extractors/csv)
-
-# We currently don't support these tests extensions on non-POSIX systems since they are designed around the
-# existence of POSIX utilities or certain system headers e.g Linux signals.
-if(WT_POSIX)
-    # Build the encryptor extensions.
-    add_subdirectory(encryptors/rotn)
-    add_subdirectory(encryptors/sodium)
-
-    # Build the storage_sources extensions.
-    add_subdirectory(storage_sources/local_store)
-    add_subdirectory(storage_sources/io_uring_store)
-
-    # Build the test extensions.
-    add_subdirectory(test/fail_fs)
+# Define the imported uring library target that can be subsequently linked across the build system.
+# We use the double colons (::) as a convention to tell CMake that the target name is associated
+# with an IMPORTED target (which allows CMake to issue a diagnostic message if the library wasn't found).
+add_library(wt::uring SHARED IMPORTED GLOBAL)
+set_target_properties(wt::uring PROPERTIES
+    IMPORTED_LOCATION ${HAVE_LIBURING}
+)
+if (HAVE_LIBURING_INCLUDES)
+    set_target_properties(wt::uring PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES ${HAVE_LIBURING_INCLUDES}
+    )
 endif()
