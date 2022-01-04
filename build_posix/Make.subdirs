@@ -18,6 +18,7 @@ ext/encryptors/rotn
 ext/encryptors/sodium SODIUM
 ext/extractors/csv
 ext/storage_sources/local_store POSIX_HOST
+ext/storage_sources/io_uring_store POSIX_HOST
 ext/test/fail_fs
 ext/test/local_store
 .

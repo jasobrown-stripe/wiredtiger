@@ -26,36 +26,30 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 #
 
-project(ext C)
+project(io_uring_store C)
 
-# Build the compressor extensions.
-add_subdirectory(compressors/lz4)
-add_subdirectory(compressors/snappy)
-add_subdirectory(compressors/zlib)
-add_subdirectory(compressors/zstd)
-add_subdirectory(compressors/nop)
+include(GNUInstallDirs)
 
-# Build the collator extensions.
-add_subdirectory(collators/reverse)
-add_subdirectory(collators/revint)
+set(sources "io_uring_store.c")
+set(link_type "MODULE")
+add_library(wiredtiger_io_uring_store MODULE ${sources})
 
-# Build the encryptor extensions.
-add_subdirectory(encryptors/nop)
+target_include_directories(
+    wiredtiger_io_uring
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/include
+        ${CMAKE_BINARY_DIR}/include
+        ${CMAKE_BINARY_DIR}/config
+)
+target_compile_options(
+    wiredtiger_io_uring
+    PRIVATE ${COMPILER_DIAGNOSTIC_C_FLAGS}
+)
 
-# Build the extractor extensions.
-add_subdirectory(extractors/csv)
+set_property(TARGET wiredtiger_io_uring PROPERTY POSITION_INDEPENDENT_CODE ON)
 
-# We currently don't support these tests extensions on non-POSIX systems since they are designed around the
-# existence of POSIX utilities or certain system headers e.g Linux signals.
-if(WT_POSIX)
-    # Build the encryptor extensions.
-    add_subdirectory(encryptors/rotn)
-    add_subdirectory(encryptors/sodium)
-
-    # Build the storage_sources extensions.
-    add_subdirectory(storage_sources/local_store)
-    add_subdirectory(storage_sources/io_uring_store)
-
-    # Build the test extensions.
-    add_subdirectory(test/fail_fs)
-endif()
+target_link_libraries(wiredtiger_io_uring wt::io_uring)
+install(TARGETS wiredtiger_io_uring
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
